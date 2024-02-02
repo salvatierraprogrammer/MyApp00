@@ -6,10 +6,12 @@ import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, getDoc, doc } from 'firebase/firestore';
 import CardAdmin from './CardAdmin';
 import { useNavigation } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';  // Importar AsyncStorage
 
 const SelectHouseScreen = ({ route }) => {
   const { data: vivienda, isLoading } = useGetViviendaQuery();
   const [userRole, setUserRole] = useState(null);
+  const [userId, setUserId] = useState(null);
   const navigation = useNavigation();
 
   useEffect(() => {
@@ -21,15 +23,32 @@ const SelectHouseScreen = ({ route }) => {
           const userDoc = await getDoc(doc(db, 'usuarios', user.uid));
           const fetchedUserData = userDoc.data();
 
-          // Assuming your user data has a 'userRole' field
-          const role = fetchedUserData?.userRole; // Use optional chaining to handle undefined
+          const role = fetchedUserData?.userRole;
           setUserRole(role);
+
+          // Almacenar userId y userRole localmente
+          setUserId(user.uid);
+          await AsyncStorage.setItem('userId', user.uid);
+          await AsyncStorage.setItem('userRole', role);
+
           console.log("Rol del usuario:", role);
         } catch (error) {
           console.error('Error fetching user data:', error);
         }
       }
     });
+
+    // Recuperar userId y userRole almacenados localmente
+    const retrieveUserData = async () => {
+      const storedUserId = await AsyncStorage.getItem('userId');
+      const storedUserRole = await AsyncStorage.getItem('userRole');
+
+      setUserId(storedUserId);
+      setUserRole(storedUserRole);
+    };
+
+    // Ejecutar la función para recuperar userId y userRole
+    retrieveUserData();
 
     return () => unsubscribe();
   }, []);

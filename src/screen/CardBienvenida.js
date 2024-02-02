@@ -10,6 +10,7 @@ import { FontAwesome5 } from '@expo/vector-icons';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { Entypo } from '@expo/vector-icons';
 
+
 const CardBienvenida = ({  route}) => {
   const navigation = useNavigation();
   const {assistanceDataToSend } = route.params;
@@ -32,9 +33,8 @@ useEffect(() => {
           const userDoc = await getDoc(doc(db, 'usuarios', user.uid));
           const userData = userDoc.data();
           setFetchedUserData(userData);
-          // console.log("Usuario:", userData);
         } catch (error) {
-          console.error('Error al obtener los datos del usuario:', error);
+          console.error('Error fetching user data:', error);
         }
       }
     });
@@ -45,11 +45,17 @@ useEffect(() => {
   fetchUserData();
 }, []);
 
-
-// console.log("Datos del usuario obtenidos:", fetchedUserData);
+// Persistir assistanceDataToSend localmente
+useEffect(() => {
+  if (assistanceDataToSend !== undefined && assistanceDataToSend !== null) {
+    AsyncStorage.setItem('assistanceDataToSend', JSON.stringify(assistanceDataToSend))
+      .catch(error => console.error('Error persisting assistanceDataToSend:', error));
+  }
+}, [assistanceDataToSend]);
 
 // Asegúrate de que fetchedUserData no sea nulo antes de desestructurarlo
 const { id, nombre, apellido, photoUrl } = fetchedUserData || {};
+console.log('Persistencia:',fetchedUserData)
 
 
 

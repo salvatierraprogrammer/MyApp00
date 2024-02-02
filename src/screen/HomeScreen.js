@@ -4,45 +4,190 @@ import CardUltimaMedicacion from './CardUtimaMedicacion';
 import CardBienvenida from './CardBienvenida';
 import PlanFarmacologicoScreen from './PlanFarmacologicoScreen';
 import CamaraScreen from './CamaraScreen';
-import { getAuth, onAuthStateChanged } from 'firebase/auth';
+import { getAuth, onAuthStateChanged, app } from 'firebase/auth';
 import { getFirestore, getDoc, doc } from 'firebase/firestore';
 import SelectHouseScreen from './SelectHouseScreen';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { storeData, retrieveData } from '../redux/storageService';
 
 
 const HomeScreen = ({ navigation, route }) => {
-  const { selectedPatient, assistanceDataToSend } = route.params || {};
+  
+  // console.log("Persistencia (Datos de asistencia): ",assistanceDataToSend);
+  // console.log("Persistencia (Datos del paciente): ",selectedPatient);
   // const ubicacionSalida = (assistanceDataToSend && assistanceDataToSend.ubicacionSalida) || null;
   // console.log("USar variable",ubicacionSalida);
 
+
   const [userRole, setUserRole] = useState(null);
+  const [userId, setUserId] = useState(null);
+  const [persistedAssistanceData, setPersistedAssistanceData] = useState(null);
+  const [persistedSelectedPatient, setPersistedSelectedPatient] = useState(null);
+  const [selectedPatient, setSelectedPatient] = useState(null);
+  const [assistanceDataToSend, setAssistanceDataToSend] = useState(null);
+  // Actualiza la función para obtener el identificador del usuario
+    const getUserIdStorageKey = (key) => `${key}_${userId}`;
+
+  
+  useEffect(() => {
+    const loadData = async () => {
+      const persistedAssistanceData = await retrieveData('assistanceDataToSend');
+      const persistedSelectedPatient = await retrieveData('selectedPatient');
+
+      setPersistedAssistanceData(persistedAssistanceData);
+
+      if (persistedSelectedPatient) {
+        setSelectedPatient(persistedSelectedPatient);
+      }
+    };
+
+    loadData();
+  }, []);    // Añade selectedPatient como dependencia para que se ejecute al cambiar
+
 
   useEffect(() => {
-    const auth = getAuth();
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    const loadAssistanceData = async () => {
+      const persistedAssistanceData = await retrieveData(getUserIdStorageKey('assistanceDataToSend'));
+      if (persistedAssistanceData) {
+        setAssistanceDataToSend(persistedAssistanceData);
+      }
+    };
+  
+    const loadSelectedPatient = async () => {
+      const persistedSelectedPatient = await retrieveData(getUserIdStorageKey('selectedPatient'));
+      if (persistedSelectedPatient) {
+        setSelectedPatient(persistedSelectedPatient);
+      }
+    };
+  
+    loadAssistanceData();
+    loadSelectedPatient();
+  }, [userId]);
+
+  useEffect(() => {
+    if (assistanceDataToSend) {
+      storeData('assistanceDataToSend', assistanceDataToSend);
+    }
+
+    if (selectedPatient) {
+      storeData('selectedPatient', selectedPatient);
+    }
+  }, [assistanceDataToSend, selectedPatient]);
+
+  useEffect(() => {
+    const loadUserData = async () => {
+      const auth = getAuth();
+      const user = auth.currentUser;
+
       if (user) {
         try {
           const db = getFirestore();
           const userDoc = await getDoc(doc(db, 'usuarios', user.uid));
           const fetchedUserData = userDoc.data();
 
-          // Assuming your user data has a 'userRole' field
-          const role = fetchedUserData?.userRole; // Use optional chaining to handle undefined
+          const role = fetchedUserData?.userRole;
+          const id = user.uid;
+
+          await AsyncStorage.setItem('userRole', role);
+          await AsyncStorage.setItem('userId', id);
+
           setUserRole(role);
-          // console.log("Rol del usuario a condicionar:", role);
+          setUserId(id);
         } catch (error) {
           console.error('Error fetching user data:', error);
         }
       }
+    };
+
+    const retrievePersistedData = async () => {
+      const storedRole = await AsyncStorage.getItem('userRole');
+      const storedId = await AsyncStorage.getItem('userId');
+
+      setUserRole(storedRole);
+      setUserId(storedId);
+
+      const storedAssistanceData = await retrieveData('assistanceDataToSend');
+      const storedSelectedPatient = await retrieveData('selectedPatient');
+
+      setPersistedAssistanceData(storedAssistanceData);
+      
+      // Añade la condición para asignar storedSelectedPatient a selectedPatient si es undefined
+      if (selectedPatient === undefined && storedSelectedPatient) {
+        setSelectedPatient(storedSelectedPatient);
+      } else {
+        setPersistedSelectedPatient(storedSelectedPatient);
+      }
+    };
+
+    const authListener = onAuthStateChanged(getAuth(), (user) => {
+      if (user) {
+        loadUserData();
+      } else {
+        retrievePersistedData();
+      }
     });
 
-    return () => unsubscribe();
-  }, []);
+    return () => {
+      authListener();
+    };
+  }, [selectedPatient]);
 
-  // console.log("Rol del usuario a condicionar:", userRole);
+  useEffect(() => {
+    if (assistanceDataToSend) {
+      storeData('assistanceDataToSend', assistanceDataToSend);
+    }
+
+    if (selectedPatient) {
+      storeData('selectedPatient', selectedPatient);
+    }
+  }, [assistanceDataToSend, selectedPatient]);
+
+
+
+  console.log("Persistencia userRole:", userRole);
+  console.log("Persistencia UserID:", userId);
+  console.log("Persistencia (Datos de asistencia): ", persistedAssistanceData);
+  console.log("Persistencia (Datos del paciente): ", persistedSelectedPatient);
+  console.log("Debug: selectedPatient:", persistedSelectedPatient);
+
+      useEffect(() => {
+          if (assistanceDataToSend !== undefined && assistanceDataToSend !== null) {
+            AsyncStorage.setItem(getUserIdStorageKey('assistanceDataToSend'), JSON.stringify(assistanceDataToSend))
+              .catch(error => console.error('Error al persistir assistanceDataToSend:', error));
+          }
+
+          if (selectedPatient !== undefined && selectedPatient !== null) {
+            AsyncStorage.setItem(getUserIdStorageKey('selectedPatient'), JSON.stringify(selectedPatient))
+              .catch(error => console.error('Error al persistir selectedPatient:', error));
+          }
+      }, [assistanceDataToSend, selectedPatient]);
+
+  const shouldRedirectToSelectHouseScreen = !persistedAssistanceData && !persistedSelectedPatient;
+  
+   useEffect(() => {
+    // Persistir assistanceDataToSend y selectedPatient localmente solo si existen
+        if (assistanceDataToSend !== undefined && assistanceDataToSend !== null) {
+          AsyncStorage.setItem('assistanceDataToSend', JSON.stringify(assistanceDataToSend))
+            .catch(error => console.error('Error al persistir assistanceDataToSend:', error));
+        }
+
+        if (selectedPatient !== undefined && selectedPatient !== null) {
+          AsyncStorage.setItem('selectedPatient', JSON.stringify(selectedPatient))
+            .catch(error => console.error('Error al persistir selectedPatient:', error));
+        }
+    }, [assistanceDataToSend, selectedPatient]);
+
+  console.log("Persistencia userRole:", userRole);
+  console.log("Persistencia UserID:", userId);
+  console.log("Persistencia (Datos de asistencia): ", persistedAssistanceData);
+  console.log("Persistencia (Datos del paciente): ", persistedSelectedPatient);
+  console.log("#### Debug: selectedPatient:", selectedPatient);
+  console.log("#### Debug: assistanceDataToSend:", assistanceDataToSend);
 
     
   
     const renderItem = () => (
+      
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Datos del usuario:</Text>
         <View style={styles.patientInfo}>
@@ -55,7 +200,7 @@ const HomeScreen = ({ navigation, route }) => {
 
     return (
       <SafeAreaView style={styles.container}>
-        {selectedPatient ? (
+        {selectedPatient && (
           <FlatList
             data={[selectedPatient]}
             keyExtractor={(item) => (item && item.id ? item.id.toString() : null)}
@@ -63,19 +208,17 @@ const HomeScreen = ({ navigation, route }) => {
             ListHeaderComponent={() => <CardBienvenida route={{ params: { assistanceDataToSend } }} />}
             ListFooterComponent={() => (
               <>
-                {/* <CamaraScreen/> */}
                 {selectedPatient && <CardUltimaMedicacion selectedPatient={selectedPatient} />}
                 {selectedPatient && <PlanFarmacologicoScreen route={{ params: { selectedPatient } }} />}
-                {(!selectedPatient && !assistanceDataToSend) && <SelectHouseScreen />}
+                {shouldRedirectToSelectHouseScreen && <SelectHouseScreen />}
               </>
             )}
           />
-        ) : (
+        )}
+  
+        {!selectedPatient && (
           <>
-            {/* <CamaraScreen/> */}
-            {selectedPatient && <CardUltimaMedicacion selectedPatient={selectedPatient} />}
-            {selectedPatient && <PlanFarmacologicoScreen route={{ params: { selectedPatient } }} />}
-            {(!selectedPatient && !assistanceDataToSend) && <SelectHouseScreen />}
+            {shouldRedirectToSelectHouseScreen && <SelectHouseScreen />}
           </>
         )}
       </SafeAreaView>
